@@ -46,7 +46,7 @@ func consumeQueue() {
 	messages, err := channel.Consume(
 		"user_queue",
 		"",
-		true,
+		false,
 		false,
 		false,
 		false,
@@ -60,7 +60,16 @@ func consumeQueue() {
 
 	go func() {
 		for message := range messages {
+			body := amqp.Publishing{
+				ContentType:   "application/json",
+				Body:          []byte(`{"server": "ping"}`),
+				CorrelationId: "testid",
+			}
 			log.Printf("\tReceived message: %s\n", message.Body)
+			log.Printf("\tCorrelation ID: %s\n", message.CorrelationId)
+			log.Printf("\tReply to: %s\n", message.ReplyTo)
+			channel.Publish("", message.ReplyTo, true, false, body)
+			channel.Ack(message.DeliveryTag, true)
 		}
 	}()
 
@@ -68,29 +77,34 @@ func consumeQueue() {
 }
 
 func main() {
-	// Code for message queue
-	consumeQueue()
-
 	// Code for http request/response
-	e := echo.New()
 
-	e.Use(middleware.Recover())
+	server := make(chan bool)
 
-	e.Validator = &CustomValidator{validator: validator.New()}
+	go func() {
+		e := echo.New()
 
-	var db service.DB = handler.CreateDB(sqliteshim.ShimName, "file::memory:")
+		e.Use(middleware.Recover())
 
-	sqldb, err := db.Connect()
-	if err != nil {
-		panic(err)
-	}
+		e.Validator = &CustomValidator{validator: validator.New()}
 
-	var userHandler handler.UserInterface = handler.CreateUserHandler(sqldb)
-	var HealthCheckHandler handler.HealthCheckInterface = handler.CreateHealthCheckHandler(db)
+		var db service.DB = handler.CreateDB(sqliteshim.ShimName, "file::memory:")
 
-	e.GET("/api/v1", userHandler.GreetUser)
-	e.POST("/api/v1/token", userHandler.GenerateToken)
-	e.GET("/api/v1/health", HealthCheckHandler.GetHealthCheck)
+		sqldb, err := db.Connect()
+		if err != nil {
+			panic(err)
+		}
 
-	e.Logger.Fatal(e.Start(":8080"))
+		var userHandler handler.UserInterface = handler.CreateUserHandler(sqldb)
+		var HealthCheckHandler handler.HealthCheckInterface = handler.CreateHealthCheckHandler(db)
+
+		e.GET("/api/v1", userHandler.GreetUser)
+		e.POST("/api/v1/token", userHandler.GenerateToken)
+		e.GET("/api/v1/health", HealthCheckHandler.GetHealthCheck)
+
+		e.Logger.Fatal(e.Start(":8080"))
+	}()
+
+	consumeQueue()
+	<-server
 }

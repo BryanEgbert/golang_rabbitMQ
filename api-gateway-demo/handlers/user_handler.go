@@ -22,12 +22,14 @@ type (
 
 	Handler struct {
 		channelRabbitMQ *amqp.Channel
+		replyQueue      string
 	}
 )
 
-func NewHandler(channel *amqp.Channel) *Handler {
+func NewHandler(channel *amqp.Channel, replyQueue string) *Handler {
 	return &Handler{
 		channelRabbitMQ: channel,
+		replyQueue:      replyQueue,
 	}
 }
 
@@ -52,8 +54,10 @@ func (h *Handler) GetUserData(c echo.Context) error {
 
 func (h *Handler) SimulateMQ(c echo.Context) error {
 	message := amqp.Publishing{
-		ContentType: "application/json",
-		Body:        []byte(`{"name": "Bob", "email": "test@test.com"}`),
+		ContentType:   "application/json",
+		Body:          []byte(`{"name": "Bob", "email": "test@test.com"}`),
+		CorrelationId: "testid",
+		ReplyTo:       h.replyQueue,
 	}
 
 	if err := h.channelRabbitMQ.Publish(
@@ -65,8 +69,6 @@ func (h *Handler) SimulateMQ(c echo.Context) error {
 	); err != nil {
 		return err
 	}
-
-	c.Logger().Debug(message)
 
 	return nil
 }

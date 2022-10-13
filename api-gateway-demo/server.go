@@ -2,6 +2,7 @@ package main
 
 import (
 	handler "api-gateway-demo/handlers"
+	"log"
 	"net/http"
 	"strings"
 
@@ -48,23 +49,63 @@ func main() {
 		nil,
 	)
 
+	replyQueue, err := channelRabbitMQ.QueueDeclare(
+		"",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+
+	log.Print(replyQueue.Name)
+
 	if err != nil {
 		panic(err)
 	}
 
-	// Create a server
-	e := echo.New()
+	messages, err := channelRabbitMQ.Consume(
+		replyQueue.Name,
+		"",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		panic(err)
+	}
 
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.Gzip())
+	server := make(chan bool)
 
-	e.Validator = &CustomValidator{validator: validator.New()}
+	go func() {
+		// Create a server
+		e := echo.New()
 
-	var handler handler.IUserHandler = handler.NewHandler(channelRabbitMQ)
+		e.Use(middleware.Logger())
+		e.Use(middleware.Recover())
+		e.Use(middleware.Gzip())
 
-	e.GET("/api-gateway/user", handler.GetUserData)
-	e.GET("/api-gateway/queue", handler.SimulateMQ)
+		e.Validator = &CustomValidator{validator: validator.New()}
 
-	e.Logger.Fatal(e.Start(":8000"))
+		var handler handler.IUserHandler = handler.NewHandler(channelRabbitMQ, replyQueue.Name)
+
+		e.GET("/api-gateway/user", handler.GetUserData)
+		e.GET("/api-gateway/queue", handler.SimulateMQ)
+
+		e.Logger.Fatal(e.Start(":8000"))
+	}()
+
+	receiver := make(chan bool)
+
+	go func() {
+		for message := range messages {
+			log.Printf("\tReceived message: %s\n", message.Body)
+			log.Printf("\tCorrelation ID: %s\n", message.CorrelationId)
+		}
+	}()
+
+	<-server
+	<-receiver
 }
