@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"log"
 	model "myapp/models"
 	service "myapp/services"
 
@@ -81,10 +82,14 @@ func (h *UserHandler) CreateToken(c echo.Context, user *User) string {
 }
 
 func (h *UserHandler) GreetUser(c echo.Context) error {
+	log.Print("Processing...")
 	user := &User{
 		Name:  "Bob",
 		Email: "bob123@test.com",
 	}
+
+	time.Sleep(5 * time.Second)
+	log.Print("Done")
 
 	return c.JSON(http.StatusOK, user)
 }

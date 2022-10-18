@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"encoding/json"
@@ -18,6 +18,10 @@ type (
 	User struct {
 		Name  string `json:"name" validate:"required"`
 		Email string `json:"email" validate:"required,email"`
+	}
+
+	ReplyQueueMessage struct {
+		ReplyQueue string `json:"reply_queue"`
 	}
 
 	Handler struct {
@@ -70,5 +74,9 @@ func (h *Handler) SimulateMQ(c echo.Context) error {
 		return err
 	}
 
-	return nil
+	replyQueue := &ReplyQueueMessage{
+		ReplyQueue: h.replyQueue,
+	}
+
+	return c.JSON(http.StatusAccepted, replyQueue)
 }

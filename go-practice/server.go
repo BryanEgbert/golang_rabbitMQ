@@ -4,6 +4,7 @@ import (
 	"log"
 	"myapp/handler"
 	service "myapp/services"
+	"time"
 
 	"net/http"
 	"strings"
@@ -60,16 +61,19 @@ func consumeQueue() {
 
 	go func() {
 		for message := range messages {
+			log.Print("Processing...")
+			time.Sleep(5 * time.Second)
 			body := amqp.Publishing{
 				ContentType:   "application/json",
-				Body:          []byte(`{"server": "ping"}`),
-				CorrelationId: "testid",
+				Body:          []byte(`{"name": "Bob", "email": "bob123@test.com"}`),
+				CorrelationId: message.CorrelationId,
 			}
 			log.Printf("\tReceived message: %s\n", message.Body)
 			log.Printf("\tCorrelation ID: %s\n", message.CorrelationId)
 			log.Printf("\tReply to: %s\n", message.ReplyTo)
 			channel.Publish("", message.ReplyTo, true, false, body)
 			channel.Ack(message.DeliveryTag, true)
+			log.Print("Done...")
 		}
 	}()
 

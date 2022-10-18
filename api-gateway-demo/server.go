@@ -1,7 +1,7 @@
 package main
 
 import (
-	handler "api-gateway-demo/handlers"
+	"api-gateway-demo/handlers"
 	"log"
 	"net/http"
 	"strings"
@@ -51,12 +51,13 @@ func main() {
 
 	replyQueue, err := channelRabbitMQ.QueueDeclare(
 		"",
+		false,
 		true,
-		false,
-		false,
+		true,
 		false,
 		nil,
 	)
+	defer channelRabbitMQ.QueueDelete(replyQueue.Name, false, false, false)
 
 	log.Print(replyQueue.Name)
 
@@ -89,20 +90,23 @@ func main() {
 
 		e.Validator = &CustomValidator{validator: validator.New()}
 
-		var handler handler.IUserHandler = handler.NewHandler(channelRabbitMQ, replyQueue.Name)
+		var handler handlers.IUserHandler = handlers.NewHandler(channelRabbitMQ, replyQueue.Name)
 
 		e.GET("/api-gateway/user", handler.GetUserData)
 		e.GET("/api-gateway/queue", handler.SimulateMQ)
+		e.GET("/api-gateway/stream", handlers.SseStream)
 
 		e.Logger.Fatal(e.Start(":8000"))
 	}()
 
 	receiver := make(chan bool)
-
 	go func() {
 		for message := range messages {
 			log.Printf("\tReceived message: %s\n", message.Body)
 			log.Printf("\tCorrelation ID: %s\n", message.CorrelationId)
+			if handlers.MessageChan != nil {
+				handlers.MessageChan <- string(message.Body)
+			}
 		}
 	}()
 
